@@ -1,0 +1,44 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python -c \"import torch, transformers, datasets, sklearn, tqdm\")",
+      "Bash(python -c ' *)",
+      "Bash(python -c \"import json; print\\(json.load\\(open\\('data/annotated/wikiann/dataset_dict.json'\\)\\)\\)\")",
+      "Bash(python -c \"import prettytable\")",
+      "Bash(python -c \"import tabulate\")",
+      "Bash(pkill -f build_datasets.py)",
+      "Bash(python pipeline/crystallization/transition.py)",
+      "Bash(python -m pipeline.crystallization.transition)",
+      "Bash(python3 -c ' *)",
+      "Bash(tmux list-panes *)",
+      "Bash(python3 -c \"import matplotlib; import numpy; print\\('ok'\\)\")",
+      "Bash(python3 -c \"from wordfreq import zipf_frequency; print\\(zipf_frequency\\('the', 'en'\\)\\)\")",
+      "Bash(python3 -c \"import nltk; from nltk.corpus import brown; print\\('ok'\\)\")",
+      "Bash(python3 -c \"from nltk.corpus import brown; words = brown.words\\(\\); print\\(len\\(words\\)\\)\")",
+      "Bash(python -c \"from pipeline.runner import build_crystallization, build_nucleation; print\\('imports OK'\\)\")",
+      "Bash(python -c \"from pipeline.crystallization.transition import TransitionCrystallization, crystallization_loss; import torch; p = [torch.rand\\(2,5\\)]; p0 = torch.zeros\\(2,5\\); y = torch.zeros\\(2,5\\); lengths = torch.tensor\\([3,5]\\); l,t = crystallization_loss\\(p, p0, y, lengths\\); print\\('loss OK', l.item\\(\\)\\)\")",
+      "Bash(python utils/inspect_span_roles.py --out /tmp/span_roles.txt)",
+      "Bash(python utils/inspect_span_roles.py --out span_roles.txt)",
+      "Bash(python -c \"from pipeline.runner import run_pipeline, setup, evaluate; print\\('OK'\\)\")",
+      "Bash(python -c \"import pycountry; print\\('ok'\\)\")",
+      "Bash(python -c \"from nltk.corpus import names; print\\(len\\(names.words\\(\\)\\)\\)\")",
+      "Bash(python -c \"import pycountry; print\\('pycountry ok'\\)\")",
+      "Bash(python -c \"from nltk.corpus import names; print\\('nltk names:', len\\(names.words\\(\\)\\)\\)\")",
+      "Bash(python -c \"import nltk; nltk.download\\('names', quiet=True\\)\")",
+      "Bash(python -c \"from nltk.corpus import names; ws = names.words\\(\\); print\\('names:', len\\(ws\\), ws[:5]\\)\")",
+      "Bash(gh repo *)",
+      "WebFetch(domain:github.com)",
+      "WebFetch(domain:raw.githubusercontent.com)",
+      "Bash(mkdir -p /home/simonelusetti/.claude/commands)",
+      "Bash(python3 -m json.tool)",
+      "Bash(find /home/simonelusetti/.claude -name \"SKILL.md\" 2>/dev/null | head -5 && find /usr -name \"SKILL.md\" 2>/dev/null | head -5 && find /opt -name \"SKILL.md\" 2>/dev/null | head -3)",
+      "Read(//usr/**)",
+      "Read(//opt/**)",
+      "Bash(/home/simonelusetti/.vscode-server/extensions/anthropic.claude-code-2.1.191-linux-x64/resources/native-binary/claude --help)",
+      "Bash(/home/simonelusetti/.vscode-server/extensions/anthropic.claude-code-2.1.191-linux-x64/resources/native-binary/claude slash *)"
+    ],
+    "additionalDirectories": [
+      "/home/simonelusetti/.claude"
+    ]
+  }
+}

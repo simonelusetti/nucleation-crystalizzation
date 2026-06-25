@@ -1,0 +1,44 @@
+defaults:
+  - runtime
+  - _self_
+
+forge:
+  store: null
+  tags: []
+  verbose: true
+  exclude:
+    - runtime
+
+data:
+  dataset: fewnerd
+  split: train
+  dir: data/annotated
+  train_subset: null
+  eval_subset: null
+
+nucleation:
+  name: prototype
+  model: bert-base-cased
+  layer: 8
+  pca_components: 256
+
+crystallization:
+  name: transition
+  d_k: 64
+  K: 3
+  gamma: 0.9
+  lr: 1e-3
+  epochs: 30
+  lambda_mono: 1.0
+  lambda_step: 0.01
+
+end2end:
+  name: null
+  model: bert-base-cased
+  layer: 8
+  pca_components: 256
+
+roles:
+  lambda_seed: 0.3
+  lambda_oov: 0.1
+  caps_threshold: 0.5

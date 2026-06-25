@@ -1,0 +1,5 @@
+runtime:
+  device: cpu
+  workers: 16
+  threads: 48
+  batch_size: 2048

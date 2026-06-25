@@ -1,0 +1,19 @@
+# Python
+__pycache__/
+*.py[cod]
+
+# Data — large binary files, never commit
+data/
+
+# Experiment outputs
+outputs/
+
+# Hydra/forge working dirs
+.hydra/
+multirun/
+
+# Editors / OS
+.venv/
+*.egg-info/
+dist/
+.DS_Store

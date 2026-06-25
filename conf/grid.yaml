@@ -1,0 +1,10 @@
+# Full nucleation × crystallization grid.
+# Usage: forge -M evaluate grid conf/grid.yaml
+#        forge -M nucleation grid conf/grid.yaml   (nucleation sweep only)
+
+globals: []
+
+direct:
+  # prototype nucleation
+  - []
+  - [nucleation.name=prototype]
