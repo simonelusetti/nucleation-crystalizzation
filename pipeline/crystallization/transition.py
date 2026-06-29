@@ -2,7 +2,6 @@
 
 import logging
 import math
-from pathlib import Path
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -10,9 +9,64 @@ from torch.utils.data import DataLoader, Dataset
 from tqdm import tqdm
 
 from ..data import make_loader
-from .base import CrystallizationBackend
 
 log = logging.getLogger(__name__)
+
+
+_SEED_ROLES = {"seed"}
+
+
+def _conditional_y(
+    binary: torch.Tensor,
+    nuc_preds: torch.Tensor,
+    roles: list[list[str]],
+    lengths: torch.Tensor,
+    oracle: bool = False,
+    true_seed_label: int = 1,
+    false_seed_label: int = 0,
+) -> torch.Tensor:
+    """Condition crystallization targets on nucleation output.
+
+    found_seed = seeds predicted by nucleation (or all GT seeds in oracle mode).
+    - True found seeds  (binary=1): labeled true_seed_label
+    - False found seeds (binary=0): labeled false_seed_label
+    - Connectors / missed seeds in spans with ≥1 true found seed: labeled 1
+    - Everything else: labeled 0
+    """
+    y = torch.zeros_like(binary, dtype=torch.float)
+    for b in range(binary.shape[0]):
+        n = int(lengths[b])
+        bin_b  = binary[b, :n]
+        nuc_b  = nuc_preds[b, :n]
+        role_b = roles[b][:n]
+        is_seed = torch.tensor([r in _SEED_ROLES for r in role_b], dtype=torch.bool)
+
+        # found_seed: seeds that nucleation "fired on" (or GT seeds in oracle mode)
+        found_seed = is_seed & (bin_b == 1 if oracle else nuc_b == 1)
+
+        # Explicit labels for found seeds
+        if oracle:
+            y[b, :n][found_seed] = float(true_seed_label)
+        else:
+            y[b, :n][found_seed & (bin_b == 1)] = float(true_seed_label)
+            y[b, :n][found_seed & (bin_b == 0)] = float(false_seed_label)
+
+        # Span activation: spans where a true found seed exists → label remaining tokens 1
+        activating = found_seed & (bin_b == 1)
+        i = 0
+        while i < n:
+            if bin_b[i] == 1:
+                j = i + 1
+                while j < n and bin_b[j] == 1:
+                    j += 1
+                if activating[i:j].any():
+                    for k in range(i, j):
+                        if not found_seed[k]:
+                            y[b, k] = 1.0
+                i = j
+            else:
+                i += 1
+    return y
 
 
 class _PairedDataset(Dataset):
@@ -154,11 +208,8 @@ def crystallization_loss(
 
 # ── Pipeline backend wrapper ──────────────────────────────────────────────────
 
-class TransitionCrystallization(CrystallizationBackend):
-    """
-    Wraps CrystallizationGrower as a CrystallizationBackend.
-    Requires examples to carry an 'encodings' field (from build_datasets.py).
-    """
+class TransitionCrystallization:
+    """Requires examples to carry an 'encodings' field (from build_datasets.py)."""
 
     def __init__(
         self,
@@ -172,23 +223,24 @@ class TransitionCrystallization(CrystallizationBackend):
         lambda_mono: float = 1.0,
         lambda_step: float = 0.01,
         num_workers: int = 0,
+        label_mode: str = "conditional",
+        true_seed_label: int = 1,
+        false_seed_label: int = 0,
     ):
-        self.grower          = CrystallizationGrower(d=d, d_k=d_k, K=K, gamma=gamma)
-        self._d              = d
-        self._lr             = lr
-        self._epochs         = epochs
-        self._train_batch    = train_batch_size
-        self._lambda_mono    = lambda_mono
-        self._lambda_step    = lambda_step
-        self._num_workers    = num_workers
-
-    @property
-    def device(self) -> torch.device:
-        return next(self.grower.parameters()).device
-
-    def to(self, device) -> "TransitionCrystallization":
-        self.grower.to(device)
-        return self
+        # ponytail: label_mode="unconditional" restores old behavior; "conditional_oracle" is an ablation
+        if label_mode not in ("conditional", "conditional_oracle", "unconditional"):
+            raise ValueError(f"Unknown label_mode: {label_mode!r}")
+        self.grower           = CrystallizationGrower(d=d, d_k=d_k, K=K, gamma=gamma)
+        self._d               = d
+        self._lr              = lr
+        self._epochs          = epochs
+        self._train_batch     = train_batch_size
+        self._lambda_mono     = lambda_mono
+        self._lambda_step     = lambda_step
+        self._num_workers     = num_workers
+        self._label_mode      = label_mode
+        self._true_seed_label  = true_seed_label
+        self._false_seed_label = false_seed_label
 
     def fit(
         self,
@@ -196,7 +248,7 @@ class TransitionCrystallization(CrystallizationBackend):
         nuc_preds: torch.Tensor,
         lengths: torch.Tensor,
     ) -> "TransitionCrystallization":
-        dev          = self.device
+        dev          = next(self.grower.parameters()).device
         ds           = _PairedDataset(loader.dataset, nuc_preds, lengths)
         train_loader = make_loader(ds, self._train_batch, shuffle=True, num_workers=self._num_workers)
 
@@ -217,8 +269,22 @@ class TransitionCrystallization(CrystallizationBackend):
             for batch in tqdm(train_loader, desc=f"cry epoch {epoch + 1}/{self._epochs}", leave=False):
                 X       = batch["encodings"].to(dev)
                 p0      = batch["nuc_preds"].float().to(dev)
-                y       = batch["binary"].float().to(dev)
                 lengths = batch["lengths"].to(dev)
+                if self._label_mode == "unconditional":
+                    y = batch["binary"].float().to(dev)
+                else:
+                    if "source_roles" not in batch:
+                        raise RuntimeError(
+                            f"label_mode={self._label_mode!r} requires source_roles — "
+                            "annotate the source dataset with roles before fitting"
+                        )
+                    oracle = self._label_mode == "conditional_oracle"
+                    y = _conditional_y(
+                        batch["binary"], batch["nuc_preds"], batch["source_roles"], batch["lengths"],
+                        oracle=oracle,
+                        true_seed_label=self._true_seed_label,
+                        false_seed_label=self._false_seed_label,
+                    ).to(dev)
 
                 optimizer.zero_grad()
                 steps = self.grower(X, p0)
@@ -243,12 +309,6 @@ class TransitionCrystallization(CrystallizationBackend):
                 f"{avgs['mono']:.4f}", f"{avgs['step']:.4f}",
             ])
 
-            models_dir = Path("models")
-            models_dir.mkdir(exist_ok=True)
-            ckpt = models_dir / f"transition_epoch{epoch + 1}.pt"
-            torch.save(self.grower.state_dict(), ckpt)
-            log.info("saved checkpoint %s", ckpt)
-
         log.info("crystallization training\n%s", table)
         self.grower.eval()
         return self
@@ -259,10 +319,8 @@ class TransitionCrystallization(CrystallizationBackend):
         nuc_preds: torch.Tensor,
         lengths: torch.Tensor,
     ) -> tuple[torch.Tensor, torch.Tensor]:
-        dev   = self.device
-        order = torch.argsort(lengths)
-        ds    = _PairedDataset(loader.dataset.select(order.tolist()),
-                               nuc_preds[order], lengths[order])
+        dev = next(self.grower.parameters()).device
+        ds  = _PairedDataset(loader.dataset, nuc_preds, lengths)
         expand_loader = make_loader(ds, loader.batch_size or 32, num_workers=self._num_workers)
 
         N, max_len = nuc_preds.shape
@@ -272,51 +330,10 @@ class TransitionCrystallization(CrystallizationBackend):
         for batch in tqdm(expand_loader, desc="cry eval", leave=False):
             X   = batch["encodings"].to(dev)
             p0  = batch["nuc_preds"].float().to(dev)
-            out = self.grower.predict(X, p0)   # (B, batch_max_len)
+            out = self.grower.predict(X, p0)
             B   = out.shape[0]
             result[cursor:cursor + B, :out.shape[1]] = out.cpu()
             cursor += B
 
-        inv_order = torch.argsort(order)
-        return result[inv_order], lengths
+        return result, lengths
 
-
-# ── Self-test ─────────────────────────────────────────────────────────────────
-
-if __name__ == "__main__":
-    torch.manual_seed(0)
-
-    d, d_k, K = 768, 64, 3
-    B, N      = 2, 20
-
-    grower = CrystallizationGrower(d=d, d_k=d_k, K=K)
-
-    X  = torch.randn(B, N, d)
-    X.requires_grad_(False)
-
-    p0 = torch.zeros(B, N)
-    for b in range(B):
-        seed_idx = torch.randperm(N)[:3]
-        p0[b, seed_idx] = 1.0
-
-    print("── Forward pass ──")
-    steps = grower(X, p0)
-    for t, p in enumerate(steps, 1):
-        print(f"  p_{t}: {tuple(p.shape)}")
-
-    y     = (torch.rand(B, N) > 0.7).float()
-    total, terms = crystallization_loss(steps, p0, y, gamma=grower.gamma)
-
-    print(f"\n── Loss ──")
-    print(f"  bce  = {terms['bce']:.4f}")
-    print(f"  mono = {terms['mono']:.4f}")
-    print(f"  step = {terms['step']:.4f}")
-    print(f"  total= {total.item():.4f}")
-
-    print("\n── Backward ──")
-    total.backward()
-    assert grower.W_Q.grad is not None and grower.W_Q.grad.abs().sum() > 0, "W_Q grad is zero!"
-    assert grower.W_K.grad is not None and grower.W_K.grad.abs().sum() > 0, "W_K grad is zero!"
-    print(f"  W_Q grad norm: {grower.W_Q.grad.norm():.4f}")
-    print(f"  W_K grad norm: {grower.W_K.grad.norm():.4f}")
-    print("  OK — all assertions passed")

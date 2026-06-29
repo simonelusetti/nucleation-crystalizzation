@@ -169,13 +169,18 @@ def _build_splits(
 
 # ── Per-dataset builders ──────────────────────────────────────────────────────
 
-def build_fewnerd(tokenizer, model, layer, device, batch_size) -> DatasetDict:
-    raw   = load_dataset("DFKI-SLT/few-nerd", "supervised")
+def _hf_tag_fn(raw):
+    """Return a callable int→str for a HuggingFace ClassLabel ner_tags feature."""
     feats = raw["train"].features["ner_tags"]
     if hasattr(feats, "feature"):
         feats = feats.feature
-    names  = feats.names if hasattr(feats, "names") else None
-    to_str = (lambda t: names[t]) if names else str
+    names = feats.names if hasattr(feats, "names") else None
+    return (lambda t: names[t]) if names else str
+
+
+def build_fewnerd(tokenizer, model, layer, device, batch_size) -> DatasetDict:
+    raw    = load_dataset("DFKI-SLT/few-nerd", "supervised")
+    to_str = _hf_tag_fn(raw)
     return _build_splits("fewnerd", raw, lambda t: _fn_bio(to_str(t)),
                          tokenizer, model, layer, device, batch_size)
 
@@ -187,23 +192,15 @@ def build_wikiann(tokenizer, model, layer, device, batch_size) -> DatasetDict:
 
 
 def build_conll2003(tokenizer, model, layer, device, batch_size) -> DatasetDict:
-    raw   = load_dataset("conll2003", trust_remote_code=True)
-    feats = raw["train"].features["ner_tags"]
-    if hasattr(feats, "feature"):
-        feats = feats.feature
-    names  = feats.names if hasattr(feats, "names") else None
-    to_str = (lambda t: names[t]) if names else str
+    raw    = load_dataset("conll2003", trust_remote_code=True)
+    to_str = _hf_tag_fn(raw)
     return _build_splits("conll2003", raw, lambda t: _norm_bio(to_str(t)),
                          tokenizer, model, layer, device, batch_size)
 
 
 def build_wnut17(tokenizer, model, layer, device, batch_size) -> DatasetDict:
-    raw   = load_dataset("wnut_17")
-    feats = raw["train"].features["ner_tags"]
-    if hasattr(feats, "feature"):
-        feats = feats.feature
-    names  = feats.names if hasattr(feats, "names") else None
-    to_str = (lambda t: names[t]) if names else str
+    raw    = load_dataset("wnut_17")
+    to_str = _hf_tag_fn(raw)
     return _build_splits("wnut17", raw, lambda t: _norm_bio(to_str(t)),
                          tokenizer, model, layer, device, batch_size)
 

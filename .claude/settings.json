@@ -35,10 +35,25 @@
       "Read(//usr/**)",
       "Read(//opt/**)",
       "Bash(/home/simonelusetti/.vscode-server/extensions/anthropic.claude-code-2.1.191-linux-x64/resources/native-binary/claude --help)",
-      "Bash(/home/simonelusetti/.vscode-server/extensions/anthropic.claude-code-2.1.191-linux-x64/resources/native-binary/claude slash *)"
+      "Bash(/home/simonelusetti/.vscode-server/extensions/anthropic.claude-code-2.1.191-linux-x64/resources/native-binary/claude slash *)",
+      "Bash(awk '{sum+=$1} END{print sum}')",
+      "Bash(xargs du -sh)",
+      "Bash(python utils/dataset_vocab_overlap.py --out overlap.txt)",
+      "Bash(python utils/inspect_connectors.py --out connectors.txt)",
+      "Bash(python -c \"import jupyter; print\\('ok'\\)\")",
+      "Bash(jupyter --config-dir)",
+      "Bash(python -m jupyter --config-dir)",
+      "Bash(mkdir -p /home/simonelusetti/.jupyter/nbconfig && cat /home/simonelusetti/.jupyter/nbconfig/notebook.json 2>/dev/null || echo \"not found\")",
+      "Bash(python -c \"from pipeline.data import build_cross_dataset_entity_rates, RoleParams; print\\('ok'\\)\")",
+      "Bash(python -c \"from pipeline.runner import run_pipeline; from pipeline.metrics import role_breakdown; print\\('ok'\\)\")",
+      "Bash(python -c \"from pipeline.runner import run_pipeline; from pipeline.metrics import role_breakdown; from pipeline.data import load_or_annotate_split; print\\('ok'\\)\")",
+      "Bash(python -c \"from pipeline.runner import run_pipeline, setup, build_nucleation; from pipeline.nucleation.prototype import PrototypeNucleation; print\\('ok'\\)\")",
+      "Bash(python -c \"from pipeline.runner import run_pipeline; print\\('ok'\\)\")",
+      "Bash(python -c \"from pipeline.data import build_dataset_entity_presence; print\\('ok'\\)\")"
     ],
     "additionalDirectories": [
-      "/home/simonelusetti/.claude"
+      "/home/simonelusetti/.claude",
+      "/home/simonelusetti/.jupyter"
     ]
   }
 }

@@ -2,8 +2,6 @@
 
 import torch
 
-from .data import MIN_COUNT, SEED_THRESHOLD, _force_lower, _is_mostly_caps
-
 
 def _spans(seq: list[int]) -> set[tuple[int, int]]:
     spans, i, n = set(), 0, len(seq)
@@ -32,11 +30,11 @@ def span_f1(y_true_seqs: list[list[int]], y_pred_seqs: list[list[int]]) -> float
     return 2 * prec * rec / (prec + rec) if (prec + rec) > 0 else 0.0
 
 
-def _f1(labels: torch.Tensor, preds: torch.Tensor, mask: torch.Tensor) -> float | None:
-    yt = labels[mask]
+def _f1(labels: torch.Tensor, preds: torch.Tensor, mask: torch.Tensor | None = None) -> float | None:
+    yt = labels if mask is None else labels[mask]
     if not (yt == 1).any():
         return None
-    yp = preds[mask]
+    yp = preds if mask is None else preds[mask]
     tp = ((yt == 1) & (yp == 1)).sum().item()
     fp = ((yt == 0) & (yp == 1)).sum().item()
     fn = ((yt == 1) & (yp == 0)).sum().item()
@@ -49,32 +47,26 @@ def role_breakdown(
     examples,
     predictions: list[list[int]],
     *,
-    entity_rate: dict,
-    count: dict,
-    rp,
+    role_col: str,
 ) -> dict:
-    all_labels, all_preds   = [], []
+    """Compute F1 scores broken down by token role.
+
+    Reads pre-computed roles from examples[role_col] (a column written by
+    load_or_annotate_split). Roles are not recomputed here.
+    """
+    all_labels, all_preds = [], []
     is_seed_list, is_conn_list = [], []
-    y_true_seqs, y_pred_seqs   = [], []
+    y_true_seqs, y_pred_seqs = [], []
 
-    for ex, ps in zip(examples, predictions):
-        tokens      = ex["tokens"]
-        binary      = list(ex["binary"])
-        mostly_caps = _is_mostly_caps(tokens, rp.caps_threshold)
+    all_binary = examples["binary"]
+    all_roles  = examples[role_col]
 
-        for idx, (word, label) in enumerate(zip(tokens, binary)):
-            c  = count.get(word, 0)
-            bn = rp.brown_norm(word, _force_lower(tokens, idx, mostly_caps))
-            if c < MIN_COUNT:
-                role = "seed" if bn <= rp.lambda_oov else "connector"
-            else:
-                rate  = entity_rate.get(word, 0.0)
-                score = rate - rp.lambda_seed * bn
-                role  = "seed" if score >= SEED_THRESHOLD else "connector"
+    for binary, roles, ps in zip(all_binary, all_roles, predictions):
+        binary = list(binary)
+        for label, role in zip(binary, roles):
             is_seed_list.append(role == "seed")
             is_conn_list.append(role == "connector")
             all_labels.append(label)
-
         all_preds.extend(ps)
         y_true_seqs.append(binary)
         y_pred_seqs.append(list(ps))
@@ -83,11 +75,15 @@ def role_breakdown(
     preds   = torch.tensor(all_preds,    dtype=torch.long)
     is_seed = torch.tensor(is_seed_list, dtype=torch.bool)
     is_conn = torch.tensor(is_conn_list, dtype=torch.bool)
-    all_mask = torch.ones(len(labels),   dtype=torch.bool)
+
+    n_total_entities = (labels == 1).sum().item()
+    n_seed_entities  = (labels[is_seed] == 1).sum().item() if is_seed.any() else 0
+    seed_coverage = n_seed_entities / n_total_entities if n_total_entities > 0 else None
 
     return {
-        "span_f1":      span_f1(y_true_seqs, y_pred_seqs),
-        "token_f1":     _f1(labels, preds, all_mask),
-        "seed_f1":      _f1(labels, preds, is_seed),
-        "connector_f1": _f1(labels, preds, is_conn),
+        "span_f1":       span_f1(y_true_seqs, y_pred_seqs),
+        "token_f1":      _f1(labels, preds),
+        "seed_f1":       _f1(labels, preds, is_seed),
+        "seed_coverage": seed_coverage,
+        "connector_f1":  _f1(labels, preds, is_conn),
     }

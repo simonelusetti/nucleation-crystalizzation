@@ -21,6 +21,7 @@ nucleation:
   model: bert-base-cased
   layer: 8
   pca_components: 256
+  prototypes: [seed, name]    # "entity" = all entity tokens; list e.g. [seed] or [seed, name]
 
 crystallization:
   name: transition
@@ -31,6 +32,11 @@ crystallization:
   epochs: 30
   lambda_mono: 1.0
   lambda_step: 0.01
+  label_mode: 
+    name: conditional   # conditional | conditional_oracle | unconditional
+    true_seeds: positive
+    false_seeds: negative
+
 
 end2end:
   name: null
@@ -39,6 +45,7 @@ end2end:
   pca_components: 256
 
 roles:
+  mode: variance          # "frequency" | "presence" | "variance"
   lambda_seed: 0.3
   lambda_oov: 0.1
   caps_threshold: 0.5

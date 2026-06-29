@@ -18,10 +18,8 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
-from pipeline.data import (
-    ALL_DATASETS, EVAL_SPLITS, MIN_COUNT, SEED_THRESHOLD,
-    RoleParams, build_brown_freq, compute_global_entity_rates, load_split,
-)
+from pipeline.data import ALL_DATASETS, EVAL_SPLITS, load_split
+from pipeline.roles import MIN_COUNT, SEED_THRESHOLD, RoleParams, build_brown_freq
 
 
 def _old_role(entity_rate: float, count: int) -> str:
